@@ -45,6 +45,32 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+def init_db():
+    """Database jadvallarini yaratish va admin yaratish"""
+    with app.app_context():
+        db.create_all()
+        
+        # Admin yaratish/yangilash (.env dan o'qiladi)
+        admin_username = os.environ.get('ADMIN_USERNAME', 'admin')
+        admin_password = os.environ.get('ADMIN_PASSWORD', 'admin123')
+        
+        existing_admin = Admin.query.filter_by(username=admin_username).first()
+        
+        if existing_admin:
+            # Admin mavjud - parolni yangilash (.env dagi parol bilan)
+            existing_admin.password_hash = generate_password_hash(admin_password)
+            db.session.commit()
+            print(f"Admin parol yangilandi: username='{admin_username}'")
+        else:
+            # Yangi admin yaratish
+            admin = Admin(
+                username=admin_username,
+                password_hash=generate_password_hash(admin_password)
+            )
+            db.session.add(admin)
+            db.session.commit()
+            print(f"Yangi admin yaratildi: username='{admin_username}'")
+
 def generate_qr_code(url):
     """QR kod yaratish"""
     qr = qrcode.QRCode(
@@ -62,6 +88,9 @@ def generate_qr_code(url):
     img_str = base64.b64encode(buffered.getvalue()).decode()
     return img_str
 
+# Database initialization - gunicorn uchun
+init_db()
+
 # 404 Error handler
 @app.errorhandler(404)
 def not_found(error):
@@ -72,9 +101,17 @@ def not_found(error):
 def index():
     return render_template('index.html')
 
+# Favicon uchun route (404 xatosi oldini olish)
+@app.route('/favicon.ico')
+def favicon():
+    abort(404)
+
 # Foydalanuvchi sahifasi
 @app.route('/<username>')
 def user_page(username):
+    # Favicon va boshqa tizim so'rovlarini filtrlash
+    if username in ['favicon.ico', 'robots.txt', 'sitemap.xml']:
+        abort(404)
     document = Document.query.filter_by(username=username).first_or_404()
     pdf_url = url_for('serve_pdf', filename=document.filename)
     return render_template('user_page.html', pdf_url=pdf_url, username=username)
@@ -195,30 +232,6 @@ def generate_qr(username):
     return render_template('qr_code.html', qr_code=qr_code, url=url, username=username)
 
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
-        
-        # Admin yaratish/yangilash (.env dan o'qiladi)
-        admin_username = os.environ.get('ADMIN_USERNAME', 'admin')
-        admin_password = os.environ.get('ADMIN_PASSWORD', 'admin123')
-        
-        existing_admin = Admin.query.filter_by(username=admin_username).first()
-        
-        if existing_admin:
-            # Admin mavjud - parolni yangilash (.env dagi parol bilan)
-            existing_admin.password_hash = generate_password_hash(admin_password)
-            db.session.commit()
-            print(f"Admin parol yangilandi: username='{admin_username}'")
-        else:
-            # Yangi admin yaratish
-            admin = Admin(
-                username=admin_username,
-                password_hash=generate_password_hash(admin_password)
-            )
-            db.session.add(admin)
-            db.session.commit()
-            print(f"Yangi admin yaratildi: username='{admin_username}'")
-    
     debug_mode = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
     app.run(debug=debug_mode, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
 
