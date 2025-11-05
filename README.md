@@ -178,8 +178,11 @@ PORT=10000
 Render dashboard'da:
 - **Build Command:** `pip install -r requirements.txt`
 - **Start Command:** `gunicorn app:app`
+- **Python Version:** `3.12` (Settings → Build & Deploy → Python Version)
 
 Yoki `Procfile` fayl avtomatik ishlatiladi.
+
+**Eslatma:** Agar build xatosi bo'lsa, Render dashboard'da "Clear build cache" tugmasini bosing va qayta deploy qiling.
 
 ### 4. Deploy
 
