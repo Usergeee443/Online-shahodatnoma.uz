@@ -150,6 +150,52 @@ mysql -u user -p
 - Browser console da xatolarni tekshiring
 - PDF.js CDN ga ulanishni tekshiring
 
+## Render.com ga Deploy qilish
+
+### 1. Render.com da yangi Web Service yaratish
+
+1. [Render.com](https://render.com) ga kirish
+2. "New +" → "Web Service" tanlang
+3. GitHub repository ni ulang
+
+### 2. Environment Variables sozlash
+
+Render dashboard'da "Environment" bo'limiga quyidagi o'zgaruvchilarni qo'shing:
+
+```
+SECRET_KEY=your-very-secret-key-minimum-32-characters-long
+DATABASE_URL=sqlite:///database.db
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=your-strong-password-here
+FLASK_DEBUG=False
+PORT=10000
+```
+
+**Muhim:** `SECRET_KEY` va `ADMIN_PASSWORD` ni kuchli qiymatlar bilan o'zgartiring!
+
+### 3. Build sozlamalari
+
+Render dashboard'da:
+- **Build Command:** `pip install -r requirements.txt`
+- **Start Command:** `gunicorn app:app`
+
+Yoki `Procfile` fayl avtomatik ishlatiladi.
+
+### 4. Deploy
+
+Render avtomatik deploy qiladi. Birinchi deploy vaqtida database va admin yaratiladi.
+
+### 5. HTTPS
+
+Render avtomatik HTTPS ta'minlaydi. Domain sozlang va saytga kirishingiz mumkin.
+
+### Eslatmalar
+
+- Render.com SQLite ni qo'llab-quvvatlaydi (ephemeral disk)
+- Production uchun PostgreSQL yoki MySQL ishlatish tavsiya etiladi
+- `SECRET_KEY` va `ADMIN_PASSWORD` ni hech qachon public qilmang
+- `.env` fayl gitga kirmaydi (`.gitignore` da)
+
 ## Litsenziya
 
 Bu loyiha universitet uchun yaratilgan.

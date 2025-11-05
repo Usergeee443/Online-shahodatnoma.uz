@@ -2,11 +2,15 @@ from flask import Flask, render_template, request, redirect, url_for, flash, ses
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
+from dotenv import load_dotenv
 import os
 import qrcode
 from io import BytesIO
 import base64
 from functools import wraps
+
+# .env faylini yuklash
+load_dotenv()
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-change-in-production')
@@ -194,15 +198,27 @@ if __name__ == '__main__':
     with app.app_context():
         db.create_all()
         
-        # Default admin yaratish (agar mavjud bo'lmasa)
-        if not Admin.query.filter_by(username='admin').first():
+        # Admin yaratish/yangilash (.env dan o'qiladi)
+        admin_username = os.environ.get('ADMIN_USERNAME', 'admin')
+        admin_password = os.environ.get('ADMIN_PASSWORD', 'admin123')
+        
+        existing_admin = Admin.query.filter_by(username=admin_username).first()
+        
+        if existing_admin:
+            # Admin mavjud - parolni yangilash (.env dagi parol bilan)
+            existing_admin.password_hash = generate_password_hash(admin_password)
+            db.session.commit()
+            print(f"Admin parol yangilandi: username='{admin_username}'")
+        else:
+            # Yangi admin yaratish
             admin = Admin(
-                username='admin',
-                password_hash=generate_password_hash('admin123')
+                username=admin_username,
+                password_hash=generate_password_hash(admin_password)
             )
             db.session.add(admin)
             db.session.commit()
-            print("Default admin yaratildi: username='admin', password='admin123'")
+            print(f"Yangi admin yaratildi: username='{admin_username}'")
     
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    debug_mode = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
+    app.run(debug=debug_mode, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
 
