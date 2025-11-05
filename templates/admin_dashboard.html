@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard - Online Shahodatnoma{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-100">
+    <!-- Header -->
+    <nav class="bg-white shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <h1 class="text-2xl font-bold text-gray-800">Admin Panel</h1>
+                <div class="flex items-center gap-4">
+                    <span class="text-gray-600">Salom, {{ session.admin_username }}</span>
+                    <a href="{{ url_for('admin_logout') }}" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg">
+                        Chiqish
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="mb-4 p-4 rounded {% if category == 'error' %}bg-red-100 text-red-700{% elif category == 'success' %}bg-green-100 text-green-700{% else %}bg-blue-100 text-blue-700{% endif %}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <!-- PDF Yuklash Formasi -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+            <h2 class="text-xl font-semibold mb-4 text-gray-800">Yangi PDF Yuklash</h2>
+            <form method="POST" action="{{ url_for('upload_pdf') }}" enctype="multipart/form-data" class="space-y-4">
+                <div>
+                    <label for="username" class="block text-gray-700 font-medium mb-2">Username</label>
+                    <input 
+                        type="text" 
+                        id="username" 
+                        name="username" 
+                        required 
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="masalan: nurmuxammadrayimiv"
+                    >
+                    <p class="mt-1 text-sm text-gray-500">URL: {{ base_url }}/<span id="username-preview" class="font-semibold">username</span></p>
+                </div>
+                
+                <div>
+                    <label for="pdf_file" class="block text-gray-700 font-medium mb-2">PDF Fayl</label>
+                    <input 
+                        type="file" 
+                        id="pdf_file" 
+                        name="pdf_file" 
+                        accept=".pdf" 
+                        required 
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                </div>
+                
+                <button 
+                    type="submit" 
+                    class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-200"
+                >
+                    PDF Yuklash
+                </button>
+            </form>
+        </div>
+
+        <!-- Fayllar Ro'yxati -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <h2 class="text-xl font-semibold mb-4 text-gray-800">Yuklangan PDF Fayllar</h2>
+            
+            {% if documents %}
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Username</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fayl Nomi</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Link</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Yuklangan</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amallar</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            {% for doc in documents %}
+                            <tr>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <span class="font-medium text-gray-900">{{ doc.username }}</span>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    {{ doc.original_filename }}
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <a href="{{ base_url }}/{{ doc.username }}" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm">
+                                        {{ base_url }}/{{ doc.username }}
+                                    </a>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    {{ doc.created_at.strftime('%d.%m.%Y %H:%M') }}
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                    <a href="{{ url_for('generate_qr', username=doc.username) }}" class="text-green-600 hover:text-green-900 mr-4">QR Kod</a>
+                                    <form method="POST" action="{{ url_for('delete_pdf', doc_id=doc.id) }}" class="inline" onsubmit="return confirm('Ushbu PDFni o\'chirishni xohlaysizmi?');">
+                                        <button type="submit" class="text-red-600 hover:text-red-900">O'chirish</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <p class="text-gray-500 text-center py-8">Hali hech qanday PDF yuklanmagan.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+    // Username preview
+    document.getElementById('username').addEventListener('input', function(e) {
+        document.getElementById('username-preview').textContent = e.target.value || 'username';
+    });
+</script>
+{% endblock %}
+
