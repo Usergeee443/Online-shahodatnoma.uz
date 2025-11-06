@@ -30,21 +30,51 @@
             {% endif %}
         {% endwith %}
 
-        <!-- PDF Yuklash Formasi -->
+        <!-- 1-bosqich: Username yaratish -->
         <div class="bg-white rounded-lg shadow-md p-6 mb-8">
-            <h2 class="text-xl font-semibold mb-4 text-gray-800">Yangi PDF Yuklash</h2>
-            <form method="POST" action="{{ url_for('upload_pdf') }}" enctype="multipart/form-data" class="space-y-4">
+            <h2 class="text-xl font-semibold mb-4 text-gray-800">1-bosqich: Username va QR Kod Yaratish</h2>
+            <p class="text-sm text-gray-600 mb-4">Avval username yarating, keyin QR kodni yuklab oling va hujjat dizayniga joylashtiring.</p>
+            <form method="POST" action="{{ url_for('create_username') }}" class="space-y-4">
                 <div>
-                    <label for="username" class="block text-gray-700 font-medium mb-2">Username</label>
+                    <label for="new_username" class="block text-gray-700 font-medium mb-2">Username</label>
                     <input 
                         type="text" 
-                        id="username" 
+                        id="new_username" 
                         name="username" 
                         required 
                         class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         placeholder="masalan: nurmuxammadrayimiv"
                     >
-                    <p class="mt-1 text-sm text-gray-500">URL: {{ base_url }}/<span id="username-preview" class="font-semibold">username</span></p>
+                    <p class="mt-1 text-sm text-gray-500">URL: {{ base_url }}/<span id="new-username-preview" class="font-semibold">username</span></p>
+                </div>
+                
+                <button 
+                    type="submit" 
+                    class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-200"
+                >
+                    Username Yaratish
+                </button>
+            </form>
+        </div>
+
+        <!-- 2-bosqich: PDF Yuklash -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+            <h2 class="text-xl font-semibold mb-4 text-gray-800">2-bosqich: PDF Hujjat Yuklash</h2>
+            <p class="text-sm text-gray-600 mb-4">Hujjat tayyor bo'lgach, username tanlab PDF faylni yuklang.</p>
+            <form method="POST" action="{{ url_for('upload_pdf') }}" enctype="multipart/form-data" class="space-y-4">
+                <div>
+                    <label for="username" class="block text-gray-700 font-medium mb-2">Username (mavjud)</label>
+                    <select 
+                        id="username" 
+                        name="username" 
+                        required 
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                        <option value="">Username tanlang...</option>
+                        {% for doc in documents %}
+                        <option value="{{ doc.username }}">{{ doc.username }}{% if not doc.has_pdf() %} (PDF yuklanmagan){% endif %}</option>
+                        {% endfor %}
+                    </select>
                 </div>
                 
                 <div>
@@ -68,9 +98,9 @@
             </form>
         </div>
 
-        <!-- Fayllar Ro'yxati -->
+        <!-- Username va Fayllar Ro'yxati -->
         <div class="bg-white rounded-lg shadow-md p-6">
-            <h2 class="text-xl font-semibold mb-4 text-gray-800">Yuklangan PDF Fayllar</h2>
+            <h2 class="text-xl font-semibold mb-4 text-gray-800">Barcha Username va Hujjatlar</h2>
             
             {% if documents %}
                 <div class="overflow-x-auto">
@@ -78,9 +108,10 @@
                         <thead class="bg-gray-50">
                             <tr>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Username</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Holat</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fayl Nomi</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Link</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Yuklangan</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Yaratilgan</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amallar</th>
                             </tr>
                         </thead>
@@ -90,8 +121,19 @@
                                 <td class="px-6 py-4 whitespace-nowrap">
                                     <span class="font-medium text-gray-900">{{ doc.username }}</span>
                                 </td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    {% if doc.has_pdf() %}
+                                        <span class="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">PDF Yuklangan</span>
+                                    {% else %}
+                                        <span class="px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">PDF Yuklanmagan</span>
+                                    {% endif %}
+                                </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    {{ doc.original_filename }}
+                                    {% if doc.original_filename %}
+                                        {{ doc.original_filename }}
+                                    {% else %}
+                                        <span class="text-gray-400">-</span>
+                                    {% endif %}
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap">
                                     <a href="{{ base_url }}/{{ doc.username }}" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm">
@@ -103,7 +145,7 @@
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                     <a href="{{ url_for('generate_qr', username=doc.username) }}" class="text-green-600 hover:text-green-900 mr-4">QR Kod</a>
-                                    <form method="POST" action="{{ url_for('delete_pdf', doc_id=doc.id) }}" class="inline" onsubmit="return confirm('Ushbu PDFni o\'chirishni xohlaysizmi?');">
+                                    <form method="POST" action="{{ url_for('delete_pdf', doc_id=doc.id) }}" class="inline" onsubmit="return confirm('Ushbu username va hujjatni o\'chirishni xohlaysizmi?');">
                                         <button type="submit" class="text-red-600 hover:text-red-900">O'chirish</button>
                                     </form>
                                 </td>
@@ -113,7 +155,7 @@
                     </table>
                 </div>
             {% else %}
-                <p class="text-gray-500 text-center py-8">Hali hech qanday PDF yuklanmagan.</p>
+                <p class="text-gray-500 text-center py-8">Hali hech qanday username yaratilmagan.</p>
             {% endif %}
         </div>
     </div>
@@ -121,9 +163,8 @@
 
 <script>
     // Username preview
-    document.getElementById('username').addEventListener('input', function(e) {
-        document.getElementById('username-preview').textContent = e.target.value || 'username';
+    document.getElementById('new_username').addEventListener('input', function(e) {
+        document.getElementById('new-username-preview').textContent = e.target.value || 'username';
     });
 </script>
 {% endblock %}
-

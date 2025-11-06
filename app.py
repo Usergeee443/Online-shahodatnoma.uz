@@ -33,9 +33,13 @@ class Admin(db.Model):
 class Document(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(100), unique=True, nullable=False, index=True)
-    filename = db.Column(db.String(255), nullable=False)
-    original_filename = db.Column(db.String(255), nullable=False)
+    filename = db.Column(db.String(255), nullable=True)  # PDF yuklanmasdan ham username yaratish mumkin
+    original_filename = db.Column(db.String(255), nullable=True)
     created_at = db.Column(db.DateTime, default=db.func.now())
+    
+    def has_pdf(self):
+        """PDF yuklanganligini tekshirish"""
+        return self.filename is not None and self.filename != ''
 
 def login_required(f):
     @wraps(f)
@@ -48,7 +52,25 @@ def login_required(f):
 def init_db():
     """Database jadvallarini yaratish va admin yaratish"""
     with app.app_context():
-        db.create_all()
+        # Eski jadvallarni o'chirish va yangisini yaratish (migration uchun)
+        # Eslatma: Production'da bu ma'lumotlarni yo'qotadi!
+        # Faqat development uchun
+        try:
+            # Document jadvali strukturasini yangilash
+            from sqlalchemy import inspect
+            inspector = inspect(db.engine)
+            if 'document' in inspector.get_table_names():
+                # Eski jadvalni o'chirish va yangisini yaratish
+                db.drop_all()
+                db.create_all()
+                print("Database jadvallari yangilandi (migration)")
+            else:
+                db.create_all()
+                print("Database jadvallari yaratildi")
+        except Exception as e:
+            # Agar xatolik bo'lsa, oddiy yaratish
+            db.create_all()
+            print(f"Database yaratildi (xatolik: {e})")
         
         # Admin yaratish/yangilash (.env dan o'qiladi)
         admin_username = os.environ.get('ADMIN_USERNAME', 'admin')
@@ -113,6 +135,11 @@ def user_page(username):
     if username in ['favicon.ico', 'robots.txt', 'sitemap.xml']:
         abort(404)
     document = Document.query.filter_by(username=username).first_or_404()
+    
+    # PDF yuklanmagan bo'lsa
+    if not document.has_pdf():
+        return render_template('user_page_no_pdf.html', username=username)
+    
     pdf_url = url_for('serve_pdf', filename=document.filename)
     return render_template('user_page.html', pdf_url=pdf_url, username=username)
 
@@ -158,7 +185,38 @@ def admin_dashboard():
     base_url = request.host_url.rstrip('/')
     return render_template('admin_dashboard.html', documents=documents, base_url=base_url)
 
-# PDF yuklash
+# Username yaratish (PDFsiz)
+@app.route('/admin/create-username', methods=['POST'])
+@login_required
+def create_username():
+    username = request.form.get('username', '').strip()
+    
+    if not username:
+        flash('Username majburiy!', 'error')
+        return redirect(url_for('admin_dashboard'))
+    
+    # Username formatini tozalash
+    username = secure_filename(username).lower().replace(' ', '')
+    
+    # Username mavjudligini tekshirish
+    existing_doc = Document.query.filter_by(username=username).first()
+    if existing_doc:
+        flash(f'Username "{username}" allaqachon mavjud!', 'error')
+        return redirect(url_for('admin_dashboard'))
+    
+    # Yangi username yaratish (PDFsiz)
+    new_doc = Document(
+        username=username,
+        filename=None,
+        original_filename=None
+    )
+    db.session.add(new_doc)
+    db.session.commit()
+    
+    flash(f'Username "{username}" muvaffaqiyatli yaratildi! Endi QR kod yuklab olishingiz mumkin.', 'success')
+    return redirect(url_for('admin_dashboard'))
+
+# PDF yuklash (mavjud username ga)
 @app.route('/admin/upload', methods=['POST'])
 @login_required
 def upload_pdf():
@@ -180,56 +238,59 @@ def upload_pdf():
     # Username formatini tozalash
     username = secure_filename(username).lower().replace(' ', '')
     
-    # Oldingi faylni o'chirish (agar mavjud bo'lsa)
+    # Username mavjudligini tekshirish
     existing_doc = Document.query.filter_by(username=username).first()
-    if existing_doc:
+    if not existing_doc:
+        flash(f'Username "{username}" topilmadi! Avval username yarating.', 'error')
+        return redirect(url_for('admin_dashboard'))
+    
+    # Oldingi PDF faylni o'chirish (agar mavjud bo'lsa)
+    if existing_doc.filename:
         old_file_path = os.path.join(app.config['UPLOAD_FOLDER'], existing_doc.filename)
         if os.path.exists(old_file_path):
             os.remove(old_file_path)
-        db.session.delete(existing_doc)
     
     # Yangi faylni saqlash
     filename = f"{username}_{os.urandom(8).hex()}.pdf"
     file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
     file.save(file_path)
     
-    # Database'ga saqlash
-    new_doc = Document(
-        username=username,
-        filename=filename,
-        original_filename=file.filename
-    )
-    db.session.add(new_doc)
+    # Database'ni yangilash
+    existing_doc.filename = filename
+    existing_doc.original_filename = file.filename
     db.session.commit()
     
     flash(f'PDF muvaffaqiyatli yuklandi! Username: {username}', 'success')
     return redirect(url_for('admin_dashboard'))
 
-# PDF o'chirish
+# Username va PDF o'chirish
 @app.route('/admin/delete/<int:doc_id>', methods=['POST'])
 @login_required
 def delete_pdf(doc_id):
     document = Document.query.get_or_404(doc_id)
     
-    # Faylni o'chirish
-    file_path = os.path.join(app.config['UPLOAD_FOLDER'], document.filename)
-    if os.path.exists(file_path):
-        os.remove(file_path)
+    # PDF faylni o'chirish (agar mavjud bo'lsa)
+    if document.filename:
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], document.filename)
+        if os.path.exists(file_path):
+            os.remove(file_path)
     
+    # Username va hujjatni o'chirish
     db.session.delete(document)
     db.session.commit()
     
-    flash('PDF muvaffaqiyatli o\'chirildi!', 'success')
+    flash('Username va hujjat muvaffaqiyatli o\'chirildi!', 'success')
     return redirect(url_for('admin_dashboard'))
 
-# QR kod yaratish
+# QR kod yaratish (PDF yuklanmasdan ham)
 @app.route('/admin/qr/<username>')
 @login_required
 def generate_qr(username):
     document = Document.query.filter_by(username=username).first_or_404()
     url = f"{request.host_url.rstrip('/')}/{document.username}"
     qr_code = generate_qr_code(url)
-    return render_template('qr_code.html', qr_code=qr_code, url=url, username=username)
+    has_pdf = document.has_pdf()
+    return render_template('qr_code.html', qr_code=qr_code, url=url, username=username, has_pdf=has_pdf)
 
 if __name__ == '__main__':
     debug_mode = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'

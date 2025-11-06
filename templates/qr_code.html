@@ -9,7 +9,12 @@
         
         <div class="text-center mb-6">
             <p class="text-gray-600 mb-2">Username: <span class="font-semibold">{{ username }}</span></p>
-            <p class="text-sm text-gray-500 mb-4">URL: <span class="font-mono">{{ url }}</span></p>
+            <p class="text-sm text-gray-500 mb-2">URL: <span class="font-mono">{{ url }}</span></p>
+            {% if has_pdf %}
+                <span class="inline-block px-3 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800 mt-2">PDF Yuklangan</span>
+            {% else %}
+                <span class="inline-block px-3 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800 mt-2">PDF hali yuklanmagan</span>
+            {% endif %}
         </div>
         
         <div class="flex justify-center mb-6">
