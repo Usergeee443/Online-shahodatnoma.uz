@@ -3,6 +3,7 @@ from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
+from sqlalchemy import inspect, text
 import os
 import qrcode
 from io import BytesIO
@@ -52,25 +53,42 @@ def login_required(f):
 def init_db():
     """Database jadvallarini yaratish va admin yaratish"""
     with app.app_context():
-        # Eski jadvallarni o'chirish va yangisini yaratish (migration uchun)
-        # Eslatma: Production'da bu ma'lumotlarni yo'qotadi!
-        # Faqat development uchun
-        try:
-            # Document jadvali strukturasini yangilash
-            from sqlalchemy import inspect
-            inspector = inspect(db.engine)
-            if 'document' in inspector.get_table_names():
-                # Eski jadvalni o'chirish va yangisini yaratish
-                db.drop_all()
-                db.create_all()
-                print("Database jadvallari yangilandi (migration)")
-            else:
-                db.create_all()
-                print("Database jadvallari yaratildi")
-        except Exception as e:
-            # Agar xatolik bo'lsa, oddiy yaratish
-            db.create_all()
-            print(f"Database yaratildi (xatolik: {e})")
+        inspector = inspect(db.engine)
+        needs_migration = False
+
+        if 'document' in inspector.get_table_names():
+            columns = {col['name']: col for col in inspector.get_columns('document')}
+            filename_col = columns.get('filename')
+            original_col = columns.get('original_filename')
+            if (filename_col and not filename_col.get('nullable', True)) or (
+                original_col and not original_col.get('nullable', True)
+            ):
+                needs_migration = True
+
+        if needs_migration:
+            with db.engine.begin() as connection:
+                connection.execute(text("ALTER TABLE document RENAME TO document_old"))
+                connection.execute(text(
+                    """
+                    CREATE TABLE document (
+                        id INTEGER NOT NULL PRIMARY KEY,
+                        username VARCHAR(100) NOT NULL UNIQUE,
+                        filename VARCHAR(255),
+                        original_filename VARCHAR(255),
+                        created_at DATETIME DEFAULT (CURRENT_TIMESTAMP)
+                    )
+                    """
+                ))
+                connection.execute(text(
+                    """
+                    INSERT INTO document (id, username, filename, original_filename, created_at)
+                    SELECT id, username, filename, original_filename, created_at FROM document_old
+                    """
+                ))
+                connection.execute(text("DROP TABLE document_old"))
+            print("Document jadvali migratsiya qilindi (filename nullable).")
+
+        db.create_all()
         
         # Admin yaratish/yangilash (.env dan o'qiladi)
         admin_username = os.environ.get('ADMIN_USERNAME', 'admin')
@@ -140,8 +158,9 @@ def user_page(username):
     if not document.has_pdf():
         return render_template('user_page_no_pdf.html', username=username)
     
-    pdf_url = url_for('serve_pdf', filename=document.filename)
-    return render_template('user_page.html', pdf_url=pdf_url, username=username)
+    viewer_url = url_for('pdf_viewer', username=document.username)
+    download_url = url_for('serve_pdf', filename=document.filename)
+    return render_template('user_page.html', viewer_url=viewer_url, download_url=download_url, username=username)
 
 @app.route('/pdf/<filename>')
 def serve_pdf(filename):
@@ -150,6 +169,18 @@ def serve_pdf(filename):
         return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
     except FileNotFoundError:
         abort(404)
+
+# PDF viewer sahifasi
+@app.route('/viewer/<username>')
+def pdf_viewer(username):
+    if username in ['favicon.ico', 'robots.txt', 'sitemap.xml']:
+        abort(404)
+    document = Document.query.filter_by(username=username).first_or_404()
+    if not document.has_pdf():
+        abort(404)
+    pdf_url = url_for('serve_pdf', filename=document.filename)
+    download_url = pdf_url
+    return render_template('pdf_viewer.html', pdf_url=pdf_url, download_url=download_url, username=username)
 
 # Admin login
 @app.route('/admin', methods=['GET', 'POST'])
