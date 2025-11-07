@@ -5,23 +5,42 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Shahodatnoma PDF - {{ username }}</title>
     <style>
+        :root {
+            color-scheme: light;
+        }
         html, body {
             margin: 0;
             padding: 0;
             height: 100%;
             background: #0f172a;
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            overflow: hidden;
         }
         .viewer-wrapper {
             position: relative;
             width: 100vw;
             height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
         }
-        .pdf-embed {
+        .pdf-container {
             width: 100%;
             height: 100%;
-            border: none;
-            background: transparent;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            padding: 12px 0 24px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        canvas {
+            width: auto;
+            margin: 0 auto;
+            box-shadow: 0 20px 45px rgba(15, 23, 42, 0.45);
+            border-radius: 4px;
+            background: #ffffff;
         }
         .loading-overlay {
             position: absolute;
@@ -29,46 +48,147 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            background: rgba(15, 23, 42, 0.95);
+            background: rgba(15, 23, 42, 0.94);
             color: #f8fafc;
             font-size: 18px;
-            letter-spacing: 0.02em;
-            transition: opacity 0.2s ease;
+            letter-spacing: 0.03em;
+            text-align: center;
+            padding: 20px;
+            transition: opacity 0.25s ease;
             z-index: 10;
         }
         .loading-overlay.hidden {
             opacity: 0;
             pointer-events: none;
         }
+        .error-message {
+            color: #fca5a5;
+            font-size: 16px;
+            text-align: center;
+        }
+        .download-link {
+            margin-top: 16px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 10px 16px;
+            background: rgba(59, 130, 246, 0.2);
+            color: #bfdbfe;
+            border-radius: 999px;
+            text-decoration: none;
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
     <div class="viewer-wrapper">
         <div id="loading" class="loading-overlay">Hujjat yuklanmoqda...</div>
-        <embed 
-            id="pdfEmbed"
-            class="pdf-embed"
-            src="{{ pdf_url }}#zoom=page-width"
-            type="application/pdf"
-            title="Shahodatnoma"
-        >
+        <div id="pdfContainer" class="pdf-container"></div>
     </div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" integrity="sha512-dBLN+G8LMilQG4TmWrmDrdNMVGPoWDb8kxHIuz4mW0jaWJpVYLV3bTw8lf7k04oaIRbc0H8cCvKsFOaoQRZ2xA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
     <script>
-        const embed = document.getElementById('pdfEmbed');
-        const loading = document.getElementById('loading');
+        const pdfUrl = '{{ pdf_url }}';
+        const downloadUrl = '{{ download_url }}';
+        const loadingEl = document.getElementById('loading');
+        const container = document.getElementById('pdfContainer');
 
-        function hideLoading() {
-            loading.classList.add('hidden');
+        if (!pdfUrl) {
+            loadingEl.innerHTML = '<div class="error-message">PDF fayl topilmadi.</div>';
+        } else {
+            const pdfjsVersion = '3.11.174';
+            pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsVersion}/pdf.worker.min.js`;
+
+            const loadingTask = pdfjsLib.getDocument({ url: pdfUrl, withCredentials: false });
+
+            loadingTask.promise.then(pdf => {
+                const totalPages = pdf.numPages;
+
+                const renderPage = pageNumber => {
+                    return pdf.getPage(pageNumber).then(page => {
+                        const viewport = page.getViewport({ scale: 1 });
+                        const devicePixelRatio = window.devicePixelRatio || 1;
+                        const containerWidth = container.clientWidth ? container.clientWidth - 32 : window.innerWidth - 32;
+                        const scale = Math.min(1.75, Math.max(0.5, containerWidth / viewport.width));
+                        const scaledViewport = page.getViewport({ scale });
+
+                        const canvas = document.createElement('canvas');
+                        canvas.width = scaledViewport.width * devicePixelRatio;
+                        canvas.height = scaledViewport.height * devicePixelRatio;
+                        canvas.style.width = `${scaledViewport.width}px`;
+                        canvas.style.height = `${scaledViewport.height}px`;
+
+                        const context = canvas.getContext('2d');
+                        context.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+
+                        container.appendChild(canvas);
+
+                        return page.render({
+                            canvasContext: context,
+                            viewport: scaledViewport
+                        }).promise;
+                    });
+                };
+
+                const renderAllPages = async () => {
+                    for (let pageNum = 1; pageNum <= totalPages; pageNum += 1) {
+                        await renderPage(pageNum);
+                    }
+                };
+
+                renderAllPages().then(() => {
+                    loadingEl.classList.add('hidden');
+                });
+            }).catch(err => {
+                console.error('PDF ochishda xatolik:', err);
+                loadingEl.innerHTML = `
+                    <div class="error-message">PDF faylni ochib bo'lmadi.</div>
+                    <a class="download-link" href="${downloadUrl}" download>
+                        PDF ni yuklab olish
+                    </a>
+                `;
+            });
         }
 
-        embed.addEventListener('load', hideLoading);
-        embed.addEventListener('error', () => {
-            loading.textContent = 'PDF faylni ochib bo\'lmadi.';
-        });
+        window.addEventListener('orientationchange', () => {
+            setTimeout(() => {
+                const canvases = container.querySelectorAll('canvas');
+                canvases.forEach(canvas => canvas.remove());
+                loadingEl.classList.remove('hidden');
+                pdfjsLib.getDocument({ url: pdfUrl }).promise.then(pdf => {
+                    const totalPages = pdf.numPages;
+                    const renderAllPages = async () => {
+                        for (let pageNum = 1; pageNum <= totalPages; pageNum += 1) {
+                            await pdf.getPage(pageNum).then(page => {
+                                const viewport = page.getViewport({ scale: 1 });
+                                const devicePixelRatio = window.devicePixelRatio || 1;
+                                const containerWidth = container.clientWidth ? container.clientWidth - 32 : window.innerWidth - 32;
+                                const scale = Math.min(1.75, Math.max(0.5, containerWidth / viewport.width));
+                                const scaledViewport = page.getViewport({ scale });
 
-        // Agar 1 sekund ichida onload kelmasa ham, foydalanuvchi PDF ni ko'rishi uchun loadingni yashirish
-        setTimeout(hideLoading, 1000);
+                                const canvas = document.createElement('canvas');
+                                canvas.width = scaledViewport.width * devicePixelRatio;
+                                canvas.height = scaledViewport.height * devicePixelRatio;
+                                canvas.style.width = `${scaledViewport.width}px`;
+                                canvas.style.height = `${scaledViewport.height}px`;
+
+                                const context = canvas.getContext('2d');
+                                context.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+
+                                container.appendChild(canvas);
+
+                                return page.render({
+                                    canvasContext: context,
+                                    viewport: scaledViewport
+                                }).promise;
+                            });
+                        }
+                    };
+
+                    renderAllPages().then(() => loadingEl.classList.add('hidden'));
+                });
+            }, 300);
+        });
     </script>
 </body>
 </html>
