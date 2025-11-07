@@ -11,6 +11,7 @@ Universitet uchun PDF shahodatnoma tizimi. Adminlar PDF fayllarni yuklab, har bi
 - ✅ Minimal foydalanuvchi sahifasi - faqat PDF ko'rinadi
 - ✅ PDF.js va iframe orqali PDF ko'rsatish
 - ✅ SQLite database (loyiha ichida, avtomatik yaratiladi)
+- ✅ PDF siqish va tezkor statik taqdim etish
 
 ## O'rnatish
 
@@ -212,6 +213,14 @@ Render avtomatik HTTPS ta'minlaydi. Domain sozlang va saytga kirishingiz mumkin.
 - Production uchun PostgreSQL yoki MySQL ishlatish tavsiya etiladi
 - `SECRET_KEY` va `ADMIN_PASSWORD` ni hech qachon public qilmang
 - `.env` fayl gitga kirmaydi (`.gitignore` da)
+
+## PDF tezkor ishlash va optimizatsiya
+
+- Fayllar `/static/docs/` papkasidan statik tarzda beriladi (cache-friendly)
+- `Cache-Control: public, max-age=86400, immutable`, `ETag` va `Last-Modified` headerlari qo'llanadi
+- PDF xizmatga yuklanganda avtomatik siqiladi (`pikepdf`, linearize) va nomi yagona qilib saqlanadi
+- Frontend `<embed>` emas, custom PDF.js renderer (canvas) orqali sahifalarni lazy render qiladi
+- Foydalanuvchi “Loading…” ko'radi, PDF tayyor bo'lishi bilan sahifa ko'rsatiladi
 
 ## Litsenziya
 

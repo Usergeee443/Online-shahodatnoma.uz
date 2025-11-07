@@ -1,19 +1,43 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, session, send_from_directory, abort
+from flask import (
+    Flask,
+    render_template,
+    request,
+    redirect,
+    url_for,
+    flash,
+    session,
+    abort,
+    Response,
+    stream_with_context
+)
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
+from werkzeug.middleware.proxy_fix import ProxyFix
 from dotenv import load_dotenv
 from sqlalchemy import inspect, text
+import tempfile
+import shutil
+import hashlib
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 import os
 import qrcode
 from io import BytesIO
 import base64
 from functools import wraps
+import pikepdf
 
 # .env faylini yuklash
 load_dotenv()
 
-app = Flask(__name__, instance_relative_config=True)
+app = Flask(
+    __name__,
+    instance_relative_config=True,
+    static_url_path='/static',
+    static_folder='static'
+)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-change-in-production')
 
 data_directory = os.environ.get('DATA_DIR')
@@ -28,12 +52,14 @@ default_db_path = os.path.join(data_directory, 'database.db')
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', f'sqlite:///{default_db_path}')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['UPLOAD_FOLDER'] = os.path.join(data_directory, 'uploads')
+app.config['STATIC_PDF_FOLDER'] = os.path.join(app.static_folder, 'docs')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
 db = SQLAlchemy(app)
 
 # Upload papkasini yaratish
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+os.makedirs(app.config['STATIC_PDF_FOLDER'], exist_ok=True)
 
 # Database modellari
 class Admin(db.Model):
@@ -99,6 +125,14 @@ def init_db():
             print("Document jadvali migratsiya qilindi (filename nullable).")
 
         db.create_all()
+
+    # Eski fayllarni static papkaga ko'chirish
+        for document in Document.query.filter(Document.filename != None).all():  # noqa: E711
+            old_path = os.path.join(app.config['UPLOAD_FOLDER'], document.filename)
+            new_path = os.path.join(app.config['STATIC_PDF_FOLDER'], document.filename)
+            if os.path.exists(old_path) and not os.path.exists(new_path):
+                os.makedirs(os.path.dirname(new_path), exist_ok=True)
+                shutil.move(old_path, new_path)
         
         # Admin yaratish/yangilash (.env dan o'qiladi)
         admin_username = os.environ.get('ADMIN_USERNAME', 'admin')
@@ -174,11 +208,46 @@ def user_page(username):
 
 @app.route('/pdf/<filename>')
 def serve_pdf(filename):
-    """PDF faylni xavfsiz tarzda uzatish"""
-    try:
-        return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
-    except FileNotFoundError:
+    """PDF faylni optimallashtirilgan holda uzatish"""
+    file_path = os.path.join(app.config['STATIC_PDF_FOLDER'], filename)
+    if not os.path.exists(file_path) or not os.path.isfile(file_path):
         abort(404)
+
+    file_stat = os.stat(file_path)
+    last_modified = datetime.fromtimestamp(file_stat.st_mtime, tz=timezone.utc).replace(microsecond=0)
+    etag_base = f"{file_stat.st_ino}-{file_stat.st_size}-{file_stat.st_mtime}".encode('utf-8')
+    etag = hashlib.sha1(etag_base).hexdigest()
+
+    # Conditional GET: ETag
+    if request.headers.get('If-None-Match') == etag:
+        return Response(status=304)
+
+    # Conditional GET: Last-Modified
+    if_modified_since = request.headers.get('If-Modified-Since')
+    if if_modified_since:
+        try:
+            ims = parsedate_to_datetime(if_modified_since)
+            if ims.tzinfo is None:
+                ims = ims.replace(tzinfo=timezone.utc)
+            if ims >= last_modified:
+                return Response(status=304)
+        except (TypeError, ValueError):
+            pass
+
+    def generate():
+        with open(file_path, 'rb') as pdf_file:
+            for chunk in iter(lambda: pdf_file.read(8192), b''):
+                yield chunk
+
+    response = Response(stream_with_context(generate()), mimetype='application/pdf')
+    response.content_length = file_stat.st_size
+    response.headers['Content-Disposition'] = f'inline; filename="{filename}"'
+    response.headers['Cache-Control'] = 'public, max-age=86400, immutable'
+    response.headers['ETag'] = etag
+    response.headers['Last-Modified'] = last_modified.strftime('%a, %d %b %Y %H:%M:%S GMT')
+    response.headers['Accept-Ranges'] = 'bytes'
+
+    return response
 
 # PDF viewer sahifasi
 @app.route('/viewer/<username>')
@@ -284,20 +353,43 @@ def upload_pdf():
     if not existing_doc:
         flash(f'Username "{username}" topilmadi! Avval username yarating.', 'error')
         return redirect(url_for('admin_dashboard'))
-    
+
+    # Vaqtinchalik faylga saqlash
+    with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf', dir=app.config['UPLOAD_FOLDER']) as tmp:
+        file.save(tmp.name)
+        temp_input = tmp.name
+
+    # PDF ni siqish va optimallashtirish
+    optimized_filename = f"{username}_{os.urandom(8).hex()}.pdf"
+    optimized_path = os.path.join(app.config['STATIC_PDF_FOLDER'], optimized_filename)
+
+    try:
+        with pikepdf.open(temp_input) as pdf:
+            save_kwargs = {'linearize': True}
+            compression_level = getattr(pikepdf, 'CompressionLevel', None)
+            if compression_level:
+                save_kwargs['compression'] = compression_level.default
+            try:
+                pdf.save(optimized_path, optimize_streams=True, **save_kwargs)
+            except TypeError:
+                pdf.save(optimized_path, **save_kwargs)
+    except Exception:
+        shutil.copyfile(temp_input, optimized_path)
+
+    # Vaqtinchalik faylni o'chirish
+    try:
+        os.remove(temp_input)
+    except OSError:
+        pass
+
     # Oldingi PDF faylni o'chirish (agar mavjud bo'lsa)
     if existing_doc.filename:
-        old_file_path = os.path.join(app.config['UPLOAD_FOLDER'], existing_doc.filename)
-        if os.path.exists(old_file_path):
-            os.remove(old_file_path)
-    
-    # Yangi faylni saqlash
-    filename = f"{username}_{os.urandom(8).hex()}.pdf"
-    file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-    file.save(file_path)
-    
+        old_static_path = os.path.join(app.config['STATIC_PDF_FOLDER'], existing_doc.filename)
+        if os.path.exists(old_static_path):
+            os.remove(old_static_path)
+
     # Database'ni yangilash
-    existing_doc.filename = filename
+    existing_doc.filename = optimized_filename
     existing_doc.original_filename = file.filename
     db.session.commit()
     
@@ -312,7 +404,7 @@ def delete_pdf(doc_id):
     
     # PDF faylni o'chirish (agar mavjud bo'lsa)
     if document.filename:
-        file_path = os.path.join(app.config['UPLOAD_FOLDER'], document.filename)
+        file_path = os.path.join(app.config['STATIC_PDF_FOLDER'], document.filename)
         if os.path.exists(file_path):
             os.remove(file_path)
     
