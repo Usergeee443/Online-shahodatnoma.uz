@@ -214,9 +214,22 @@ def user_page(username):
     # PDF yuklanmagan bo'lsa
     if not document.has_pdf():
         return render_no_cache('user_page_no_pdf.html', username=username)
-    
+
+    user_agent = (request.user_agent.string or '').lower()
+    is_android = 'android' in user_agent
+
     viewer_url = url_for('pdf_viewer', username=document.username)
     download_url = url_for('serve_pdf', filename=document.filename)
+
+    if is_android:
+        download_force_url = url_for('serve_pdf', filename=document.filename, download=1)
+        return render_no_cache(
+            'user_page_android.html',
+            download_url=download_force_url,
+            fallback_url=download_url,
+            username=username
+        )
+
     return render_no_cache('user_page.html', viewer_url=viewer_url, download_url=download_url, username=username)
 
 @app.route('/pdf/<filename>')
@@ -247,6 +260,7 @@ def serve_pdf(filename):
         except (TypeError, ValueError):
             pass
 
+    force_download = request.args.get('download') == '1'
     range_header = request.headers.get('Range')
     status_code = 200
     content_range = None
@@ -292,7 +306,8 @@ def serve_pdf(filename):
 
     response = Response(stream_with_context(generate(start, end)), status=status_code, mimetype='application/pdf')
     response.headers['Content-Length'] = str(length)
-    response.headers['Content-Disposition'] = f'inline; filename="{filename}"'
+    disposition_type = 'attachment' if force_download else 'inline'
+    response.headers['Content-Disposition'] = f'{disposition_type}; filename="{filename}"'
     response.headers['Cache-Control'] = 'public, max-age=86400, immutable'
     response.headers['ETag'] = etag
     response.headers['Last-Modified'] = last_modified.strftime('%a, %d %b %Y %H:%M:%S GMT')
