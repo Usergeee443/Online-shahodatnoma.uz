@@ -8,7 +8,8 @@ from flask import (
     session,
     abort,
     Response,
-    stream_with_context
+    stream_with_context,
+    make_response
 )
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -176,6 +177,14 @@ def generate_qr_code(url):
     img_str = base64.b64encode(buffered.getvalue()).decode()
     return img_str
 
+
+def render_no_cache(template_name, **context):
+    response = make_response(render_template(template_name, **context))
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
+
 # Database initialization - gunicorn uchun
 init_db()
 
@@ -204,11 +213,11 @@ def user_page(username):
     
     # PDF yuklanmagan bo'lsa
     if not document.has_pdf():
-        return render_template('user_page_no_pdf.html', username=username)
+        return render_no_cache('user_page_no_pdf.html', username=username)
     
     viewer_url = url_for('pdf_viewer', username=document.username)
     download_url = url_for('serve_pdf', filename=document.filename)
-    return render_template('user_page.html', viewer_url=viewer_url, download_url=download_url, username=username)
+    return render_no_cache('user_page.html', viewer_url=viewer_url, download_url=download_url, username=username)
 
 @app.route('/pdf/<filename>')
 def serve_pdf(filename):
@@ -238,18 +247,58 @@ def serve_pdf(filename):
         except (TypeError, ValueError):
             pass
 
-    def generate():
-        with open(file_path, 'rb') as pdf_file:
-            for chunk in iter(lambda: pdf_file.read(8192), b''):
-                yield chunk
+    range_header = request.headers.get('Range')
+    status_code = 200
+    content_range = None
+    chunk_size = 8192
+    start = 0
+    end = file_stat.st_size - 1
 
-    response = Response(stream_with_context(generate()), mimetype='application/pdf')
-    response.content_length = file_stat.st_size
+    if range_header:
+        # Format: bytes=start-end
+        try:
+            units, range_spec = range_header.split('=', 1)
+            if units.strip().lower() == 'bytes':
+                range_spec = range_spec.strip()
+                if ',' in range_spec:
+                    range_spec = range_spec.split(',', 1)[0]
+                start_str, end_str = range_spec.split('-', 1)
+                if start_str:
+                    start = int(start_str)
+                if end_str:
+                    end = int(end_str)
+                if start > end or end >= file_stat.st_size:
+                    start = 0
+                    end = file_stat.st_size - 1
+                status_code = 206
+                content_range = f'bytes {start}-{end}/{file_stat.st_size}'
+        except ValueError:
+            start = 0
+            end = file_stat.st_size - 1
+
+    length = end - start + 1
+
+    def generate(start_pos, end_pos):
+        with open(file_path, 'rb') as pdf_file:
+            pdf_file.seek(start_pos)
+            bytes_remaining = length
+            while bytes_remaining > 0:
+                read_size = min(chunk_size, bytes_remaining)
+                data = pdf_file.read(read_size)
+                if not data:
+                    break
+                yield data
+                bytes_remaining -= len(data)
+
+    response = Response(stream_with_context(generate(start, end)), status=status_code, mimetype='application/pdf')
+    response.headers['Content-Length'] = str(length)
     response.headers['Content-Disposition'] = f'inline; filename="{filename}"'
     response.headers['Cache-Control'] = 'public, max-age=86400, immutable'
     response.headers['ETag'] = etag
     response.headers['Last-Modified'] = last_modified.strftime('%a, %d %b %Y %H:%M:%S GMT')
     response.headers['Accept-Ranges'] = 'bytes'
+    if content_range:
+        response.headers['Content-Range'] = content_range
 
     return response
 
@@ -263,7 +312,7 @@ def pdf_viewer(username):
         abort(404)
     pdf_url = url_for('serve_pdf', filename=document.filename)
     download_url = pdf_url
-    return render_template('pdf_viewer.html', pdf_url=pdf_url, download_url=download_url, username=username)
+    return render_no_cache('pdf_viewer.html', pdf_url=pdf_url, download_url=download_url, username=username)
 
 # Admin login
 @app.route('/admin', methods=['GET', 'POST'])
