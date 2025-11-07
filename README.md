@@ -219,6 +219,8 @@ Render avtomatik HTTPS ta'minlaydi. Domain sozlang va saytga kirishingiz mumkin.
 - Fayllar `/static/docs/` papkasidan statik tarzda beriladi (cache-friendly)
 - `Cache-Control: public, max-age=86400, immutable`, `ETag` va `Last-Modified` headerlari qo'llanadi
 - PDF xizmatga yuklanganda avtomatik siqiladi (`pikepdf`, linearize) va nomi yagona qilib saqlanadi
+  - Agar `pikepdf` o'rnatilmagan bo'lsa (masalan Render build muhitida), fayl original holda saqlanadi
+- Siqishni yoqmoqchi bo'lsangiz: `pip install pikepdf` va serverni qayta ishga tushiring
 - Frontend `<embed>` emas, custom PDF.js renderer (canvas) orqali sahifalarni lazy render qiladi
 - Foydalanuvchi “Loading…” ko'radi, PDF tayyor bo'lishi bilan sahifa ko'rsatiladi
 

@@ -26,7 +26,11 @@ import qrcode
 from io import BytesIO
 import base64
 from functools import wraps
-import pikepdf
+
+try:
+    import pikepdf
+except ImportError:  # Render kabi muhitlarda build xatosi bo'lishi mumkin
+    pikepdf = None
 
 # .env faylini yuklash
 load_dotenv()
@@ -363,17 +367,23 @@ def upload_pdf():
     optimized_filename = f"{username}_{os.urandom(8).hex()}.pdf"
     optimized_path = os.path.join(app.config['STATIC_PDF_FOLDER'], optimized_filename)
 
-    try:
-        with pikepdf.open(temp_input) as pdf:
-            save_kwargs = {'linearize': True}
-            compression_level = getattr(pikepdf, 'CompressionLevel', None)
-            if compression_level:
-                save_kwargs['compression'] = compression_level.default
-            try:
-                pdf.save(optimized_path, optimize_streams=True, **save_kwargs)
-            except TypeError:
-                pdf.save(optimized_path, **save_kwargs)
-    except Exception:
+    compression_succeeded = False
+    if pikepdf is not None:
+        try:
+            with pikepdf.open(temp_input) as pdf:
+                save_kwargs = {'linearize': True}
+                compression_level = getattr(pikepdf, 'CompressionLevel', None)
+                if compression_level:
+                    save_kwargs['compression'] = compression_level.default
+                try:
+                    pdf.save(optimized_path, optimize_streams=True, **save_kwargs)
+                except TypeError:
+                    pdf.save(optimized_path, **save_kwargs)
+                compression_succeeded = True
+        except Exception as exc:  # noqa: F841
+            compression_succeeded = False
+
+    if not compression_succeeded:
         shutil.copyfile(temp_input, optimized_path)
 
     # Vaqtinchalik faylni o'chirish
