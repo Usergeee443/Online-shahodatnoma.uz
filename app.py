@@ -13,11 +13,21 @@ from functools import wraps
 # .env faylini yuklash
 load_dotenv()
 
-app = Flask(__name__)
+app = Flask(__name__, instance_relative_config=True)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-change-in-production')
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///database.db')
+
+data_directory = os.environ.get('DATA_DIR')
+if data_directory:
+    data_directory = os.path.abspath(data_directory)
+else:
+    data_directory = app.instance_path
+
+os.makedirs(data_directory, exist_ok=True)
+
+default_db_path = os.path.join(data_directory, 'database.db')
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', f'sqlite:///{default_db_path}')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['UPLOAD_FOLDER'] = 'uploads'
+app.config['UPLOAD_FOLDER'] = os.path.join(data_directory, 'uploads')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
 db = SQLAlchemy(app)

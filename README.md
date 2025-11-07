@@ -52,6 +52,8 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://user:password@localhost
 ```env
 SECRET_KEY=your-secret-key-here
 DATABASE_URL=sqlite:///database.db  # default
+# Render persistent disk (ixtiyoriy)
+# DATA_DIR=/data
 ```
 
 ### 5. Ishga tushirish
@@ -183,6 +185,18 @@ Render dashboard'da:
 Yoki `Procfile` fayl avtomatik ishlatiladi.
 
 **Eslatma:** Agar build xatosi bo'lsa, Render dashboard'da "Clear build cache" tugmasini bosing va qayta deploy qiling.
+
+### 3.1. Render persistent disk (ma'lumotlarni saqlab qolish)
+
+1. Render Web Service → **Settings → Disks → Add Disk**
+   - **Mount Path:** `/data`
+   - **Size:** ehtiyojingizga mos (masalan, 1 GB)
+2. Environment Variables bo'limiga qo'shing: `DATA_DIR=/data`
+3. Agar SQLite ishlatsangiz, `DATABASE_URL` ni qo'ymasangiz ham yozuvlar `/data/database.db` da saqlanadi.
+4. PDF yuklash papkasi ham shu diskda (`/data/uploads`) saqlanadi.
+5. Deploydan so'ng «[Manual Deploy] → Clear build cache & deploy» ni bosing.
+
+Shu tartibda, yangi deploylarda ham ma'lumotlar o'chmaydi.
 
 ### 4. Deploy
 
