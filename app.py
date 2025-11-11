@@ -231,7 +231,6 @@ def user_page(username):
         return render_no_cache(
             'user_page_android.html',
             google_viewer_url=google_viewer_url,
-            download_url=download_url,
             username=username
         )
 
