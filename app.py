@@ -22,6 +22,7 @@ import shutil
 import hashlib
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
+from urllib.parse import quote
 import os
 import qrcode
 from io import BytesIO
@@ -222,11 +223,15 @@ def user_page(username):
     download_url = url_for('serve_pdf', filename=document.filename)
 
     if is_android:
-        download_force_url = url_for('serve_pdf', filename=document.filename, download=1)
+        pdf_absolute_url = url_for('serve_pdf', filename=document.filename, _external=True)
+        google_viewer_url = (
+            "https://docs.google.com/gview?embedded=1&url="
+            + quote(pdf_absolute_url, safe='')
+        )
         return render_no_cache(
             'user_page_android.html',
-            download_url=download_force_url,
-            fallback_url=download_url,
+            google_viewer_url=google_viewer_url,
+            download_url=download_url,
             username=username
         )
 
