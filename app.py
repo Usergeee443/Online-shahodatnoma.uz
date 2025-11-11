@@ -216,23 +216,8 @@ def user_page(username):
     if not document.has_pdf():
         return render_no_cache('user_page_no_pdf.html', username=username)
 
-    user_agent = (request.user_agent.string or '').lower()
-    is_android = 'android' in user_agent
-
     viewer_url = url_for('pdf_viewer', username=document.username)
     download_url = url_for('serve_pdf', filename=document.filename)
-
-    if is_android:
-        pdf_absolute_url = url_for('serve_pdf', filename=document.filename, _external=True)
-        google_viewer_url = (
-            "https://docs.google.com/gview?embedded=1&url="
-            + quote(pdf_absolute_url, safe='')
-        )
-        return render_no_cache(
-            'user_page_android.html',
-            google_viewer_url=google_viewer_url,
-            username=username
-        )
 
     return render_no_cache('user_page.html', viewer_url=viewer_url, download_url=download_url, username=username)
 
@@ -330,8 +315,12 @@ def pdf_viewer(username):
     if not document.has_pdf():
         abort(404)
     pdf_url = url_for('serve_pdf', filename=document.filename)
+    pdf_absolute_url = url_for('serve_pdf', filename=document.filename, _external=True)
+    pdf_encoded_url = quote(pdf_absolute_url, safe='')
+    pdfjs_version = '3.11.174'
+    viewer_src = f"https://cdnjs.cloudflare.com/ajax/libs/pdf.js/{pdfjs_version}/web/viewer.html?file={pdf_encoded_url}#zoom=page-width"
     download_url = pdf_url
-    return render_no_cache('pdf_viewer.html', pdf_url=pdf_url, download_url=download_url, username=username)
+    return render_no_cache('pdf_viewer.html', viewer_src=viewer_src, download_url=download_url, username=username)
 
 # Admin login
 @app.route('/admin', methods=['GET', 'POST'])

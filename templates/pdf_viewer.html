@@ -10,107 +10,71 @@
             padding: 0;
             height: 100%;
             background: #0f172a;
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         }
         .viewer-wrapper {
             position: relative;
             width: 100vw;
             height: 100vh;
         }
-        .pdf-embed {
+        iframe {
             width: 100%;
             height: 100%;
             border: none;
-            background: transparent;
+            background: #0f172a;
         }
-        .loading-overlay {
+        .fallback {
             position: absolute;
             inset: 0;
             display: flex;
-            align-items: center;
+            flex-direction: column;
             justify-content: center;
-            background: rgba(15, 23, 42, 0.95);
+            align-items: center;
+            gap: 12px;
+            background: rgba(15, 23, 42, 0.94);
             color: #f8fafc;
-            font-size: 18px;
-            letter-spacing: 0.02em;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            text-align: center;
+            padding: 24px;
             transition: opacity 0.2s ease;
-            z-index: 10;
-        }
-        .loading-overlay.hidden {
-            opacity: 0;
             pointer-events: none;
         }
-        .error-message {
-            color: #fca5a5;
-            text-align: center;
+        .fallback.hidden {
+            opacity: 0;
         }
-        .download-link {
-            margin-top: 12px;
+        .fallback a {
             display: inline-flex;
             align-items: center;
+            justify-content: center;
             gap: 6px;
             padding: 10px 16px;
-            background: rgba(59, 130, 246, 0.2);
+            background: rgba(59,130,246,0.25);
             color: #bfdbfe;
             border-radius: 999px;
             text-decoration: none;
-            font-size: 14px;
+            font-weight: 600;
         }
     </style>
 </head>
 <body>
     <div class="viewer-wrapper">
-        <div id="loading" class="loading-overlay">Hujjat yuklanmoqda...</div>
-        <embed 
-            id="pdfEmbed"
-            class="pdf-embed"
-            src="{{ pdf_url }}#zoom=page-width"
-            type="application/pdf"
-            title="Shahodatnoma"
-        >
+        <iframe id="pdfViewerFrame" src="{{ viewer_src }}" allow="fullscreen"></iframe>
+        <div id="fallback" class="fallback">
+            <div>Hujjat yuklanmoqda...</div>
+            <a href="{{ download_url }}" download>PDF ni yuklab olish</a>
+        </div>
     </div>
 
     <script>
-        const embed = document.getElementById('pdfEmbed');
-        const loading = document.getElementById('loading');
-        const pdfUrl = '{{ pdf_url }}';
-        const downloadUrl = '{{ download_url }}';
+        const frame = document.getElementById('pdfViewerFrame');
+        const fallback = document.getElementById('fallback');
 
-        function applyZoom() {
-            if (!pdfUrl) return;
-            const baseUrl = pdfUrl.split('#')[0];
-            embed.src = `${baseUrl}#zoom=page-width`;
-        }
+        frame.addEventListener('load', () => {
+            fallback.classList.add('hidden');
+        });
 
-        function hideLoading() {
-            loading.classList.add('hidden');
-        }
-
-        if (!pdfUrl) {
-            loading.innerHTML = '<div class="error-message">PDF fayl topilmadi.</div>';
-        } else {
-            applyZoom();
-            embed.addEventListener('load', hideLoading);
-            embed.addEventListener('error', () => {
-                loading.innerHTML = `
-                    <div class="error-message">PDF faylni ochib bo'lmadi.</div>
-                    <a class="download-link" href="${downloadUrl}" download>
-                        PDF ni yuklab olish
-                    </a>
-                `;
-            });
-
-            // iOS/Android orientation o'zgarganda zoom ni qayta qo'llash
-            window.addEventListener('orientationchange', () => {
-                loading.classList.remove('hidden');
-                setTimeout(() => {
-                    applyZoom();
-                }, 200);
-            });
-        }
-
-        // Agar 1 sekund ichida onload kelmasa ham, foydalanuvchi PDF ni ko'rishi uchun loadingni yashirish
-        setTimeout(hideLoading, 1000);
+        frame.addEventListener('error', () => {
+            fallback.classList.remove('hidden');
+        });
     </script>
 </body>
 </html>
