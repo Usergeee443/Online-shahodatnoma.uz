@@ -220,9 +220,10 @@ Render avtomatik HTTPS ta'minlaydi. Domain sozlang va saytga kirishingiz mumkin.
 - `Cache-Control: public, max-age=86400, immutable`, `ETag` va `Last-Modified` headerlari qo'llanadi
 - PDF xizmatga yuklanganda avtomatik siqiladi (`pikepdf`, linearize) va nomi yagona qilib saqlanadi
   - Agar `pikepdf` o'rnatilmagan bo'lsa (masalan Render build muhitida), fayl original holda saqlanadi
+- PDF sahifalarini Android foydalanuvchilari uchun rasmga aylantirish (`PyMuPDF`) qo'llab-quvvatlanadi
 - Siqishni yoqmoqchi bo'lsangiz: `pip install pikepdf` va serverni qayta ishga tushiring
-- Frontend `<embed>` emas, custom PDF.js renderer (canvas) orqali sahifalarni lazy render qiladi
-- Foydalanuvchi “Loading…” ko'radi, PDF tayyor bo'lishi bilan sahifa ko'rsatiladi
+- Android foydalanuvchilari uchun rasmga aylantirishni qo'llash uchun: `pip install PyMuPDF`
+- Frontend `<embed>` orqali PDF ni ko'rsatadi; Android qurilmalarida zarurat bo'lsa avtomatik rasm shaklini ishlatadi
 
 ## Litsenziya
 

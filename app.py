@@ -30,6 +30,11 @@ import base64
 from functools import wraps
 
 try:
+    import fitz  # PyMuPDF
+except ImportError:
+    fitz = None
+
+try:
     import pikepdf
 except ImportError:  # Render kabi muhitlarda build xatosi bo'lishi mumkin
     pikepdf = None
@@ -59,6 +64,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', f'sqlite:
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['UPLOAD_FOLDER'] = os.path.join(data_directory, 'uploads')
 app.config['STATIC_PDF_FOLDER'] = os.path.join(app.static_folder, 'docs')
+app.config['STATIC_PDF_IMAGE_FOLDER'] = os.path.join(app.static_folder, 'docs_images')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
 db = SQLAlchemy(app)
@@ -66,6 +72,7 @@ db = SQLAlchemy(app)
 # Upload papkasini yaratish
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs(app.config['STATIC_PDF_FOLDER'], exist_ok=True)
+os.makedirs(app.config['STATIC_PDF_IMAGE_FOLDER'], exist_ok=True)
 
 # Database modellari
 class Admin(db.Model):
@@ -179,6 +186,59 @@ def generate_qr_code(url):
     return img_str
 
 
+def get_pdf_image_urls(filename: str):
+    """
+    PDF sahifalarini PNG rasmlarga aylantiradi va URL ro'yxatini qaytaradi.
+    """
+    if fitz is None:
+        return []
+
+    pdf_path = os.path.join(app.config['STATIC_PDF_FOLDER'], filename)
+    if not os.path.exists(pdf_path):
+        return []
+
+    base_name = os.path.splitext(filename)[0]
+    image_dir = os.path.join(app.config['STATIC_PDF_IMAGE_FOLDER'], base_name)
+    os.makedirs(image_dir, exist_ok=True)
+
+    image_urls = []
+
+    existing_images = sorted(
+        [
+            f for f in os.listdir(image_dir)
+            if f.lower().endswith('.png')
+        ]
+    )
+
+    if not existing_images:
+        try:
+            doc = fitz.open(pdf_path)
+        except Exception:
+            return []
+
+        for page_index, page in enumerate(doc, start=1):
+            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
+            image_filename = f'page_{page_index}.png'
+            image_path = os.path.join(image_dir, image_filename)
+            pix.save(image_path)
+            image_urls.append(
+                url_for(
+                    'static',
+                    filename=f'docs_images/{base_name}/{image_filename}'
+                )
+            )
+    else:
+        for image_filename in existing_images:
+            image_urls.append(
+                url_for(
+                    'static',
+                    filename=f'docs_images/{base_name}/{image_filename}'
+                )
+            )
+
+    return image_urls
+
+
 def render_no_cache(template_name, **context):
     response = make_response(render_template(template_name, **context))
     response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
@@ -220,7 +280,19 @@ def user_page(username):
     download_url = url_for('serve_pdf', filename=document.filename)
 
     user_agent = (request.user_agent.string or '').lower()
-    if 'android' in user_agent:
+    is_android = 'android' in user_agent
+
+    if is_android and fitz is not None:
+        image_urls = get_pdf_image_urls(document.filename)
+        if image_urls:
+            return render_no_cache(
+                'user_page_images.html',
+                image_urls=image_urls,
+                download_url=download_url,
+                username=username
+            )
+
+    if is_android:
         return redirect(download_url)
 
     return render_no_cache('user_page.html', viewer_url=viewer_url, download_url=download_url, username=username)
