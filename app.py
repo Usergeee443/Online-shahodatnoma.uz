@@ -219,6 +219,10 @@ def user_page(username):
     viewer_url = url_for('pdf_viewer', username=document.username)
     download_url = url_for('serve_pdf', filename=document.filename)
 
+    user_agent = (request.user_agent.string or '').lower()
+    if 'android' in user_agent:
+        return redirect(download_url)
+
     return render_no_cache('user_page.html', viewer_url=viewer_url, download_url=download_url, username=username)
 
 @app.route('/pdf/<filename>')
@@ -315,12 +319,8 @@ def pdf_viewer(username):
     if not document.has_pdf():
         abort(404)
     pdf_url = url_for('serve_pdf', filename=document.filename)
-    pdf_absolute_url = url_for('serve_pdf', filename=document.filename, _external=True)
-    pdf_encoded_url = quote(pdf_absolute_url, safe='')
-    pdfjs_version = '3.11.174'
-    viewer_src = f"https://cdnjs.cloudflare.com/ajax/libs/pdf.js/{pdfjs_version}/web/viewer.html?file={pdf_encoded_url}#zoom=page-width"
     download_url = pdf_url
-    return render_no_cache('pdf_viewer.html', viewer_src=viewer_src, download_url=download_url, username=username)
+    return render_no_cache('pdf_viewer.html', pdf_url=pdf_url, download_url=download_url, username=username)
 
 # Admin login
 @app.route('/admin', methods=['GET', 'POST'])

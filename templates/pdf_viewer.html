@@ -16,65 +16,65 @@
             width: 100vw;
             height: 100vh;
         }
-        iframe {
+        .pdf-embed {
             width: 100%;
             height: 100%;
             border: none;
-            background: #0f172a;
-        }
-        .fallback {
-            position: absolute;
-            inset: 0;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            gap: 12px;
-            background: rgba(15, 23, 42, 0.94);
-            color: #f8fafc;
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            text-align: center;
-            padding: 24px;
-            transition: opacity 0.2s ease;
-            pointer-events: none;
-        }
-        .fallback.hidden {
-            opacity: 0;
-        }
-        .fallback a {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-            padding: 10px 16px;
-            background: rgba(59,130,246,0.25);
-            color: #bfdbfe;
-            border-radius: 999px;
-            text-decoration: none;
-            font-weight: 600;
+            background: transparent;
         }
     </style>
 </head>
 <body>
     <div class="viewer-wrapper">
-        <iframe id="pdfViewerFrame" src="{{ viewer_src }}" allow="fullscreen"></iframe>
-        <div id="fallback" class="fallback">
-            <div>Hujjat yuklanmoqda...</div>
-            <a href="{{ download_url }}" download>PDF ni yuklab olish</a>
-        </div>
+        <div id="loading" class="loading-overlay">Hujjat yuklanmoqda...</div>
+        <embed 
+            id="pdfEmbed"
+            class="pdf-embed"
+            src="{{ pdf_url }}#zoom=page-width"
+            type="application/pdf"
+            title="Shahodatnoma"
+        >
     </div>
 
     <script>
-        const frame = document.getElementById('pdfViewerFrame');
-        const fallback = document.getElementById('fallback');
+        const embed = document.getElementById('pdfEmbed');
+        const loading = document.getElementById('loading');
+        const pdfUrl = '{{ pdf_url }}';
+        const downloadUrl = '{{ download_url }}';
 
-        frame.addEventListener('load', () => {
-            fallback.classList.add('hidden');
-        });
+        function applyZoom() {
+            if (!pdfUrl) return;
+            const baseUrl = pdfUrl.split('#')[0];
+            embed.src = `${baseUrl}#zoom=page-width`;
+        }
 
-        frame.addEventListener('error', () => {
-            fallback.classList.remove('hidden');
-        });
+        function hideLoading() {
+            loading.classList.add('hidden');
+        }
+
+        if (!pdfUrl) {
+            loading.innerHTML = '<div class="error-message">PDF fayl topilmadi.</div>';
+        } else {
+            applyZoom();
+            embed.addEventListener('load', hideLoading);
+            embed.addEventListener('error', () => {
+                loading.innerHTML = `
+                    <div class="error-message">PDF faylni ochib bo'lmadi.</div>
+                    <a class="download-link" href="${downloadUrl}" download>
+                        PDF ni yuklab olish
+                    </a>
+                `;
+            });
+
+            window.addEventListener('orientationchange', () => {
+                loading.classList.remove('hidden');
+                setTimeout(() => {
+                    applyZoom();
+                }, 200);
+            });
+        }
+
+        setTimeout(hideLoading, 1000);
     </script>
 </body>
 </html>
