@@ -3,79 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shahodatnoma PDF - {{ username }}</title>
+    <title>Shahodatnoma - {{ username }}</title>
     <style>
         html, body {
             margin: 0;
             padding: 0;
             height: 100%;
-            background: #0f172a;
         }
-        .viewer-wrapper {
-            position: relative;
-            width: 100vw;
-            height: 100vh;
-        }
-        .pdf-embed {
+        embed {
             width: 100%;
             height: 100%;
             border: none;
-            background: transparent;
         }
     </style>
 </head>
 <body>
-    <div class="viewer-wrapper">
-        <div id="loading" class="loading-overlay">Hujjat yuklanmoqda...</div>
-        <embed 
-            id="pdfEmbed"
-            class="pdf-embed"
-            src="{{ pdf_url }}#zoom=page-width"
-            type="application/pdf"
-            title="Shahodatnoma"
-        >
-    </div>
-
-    <script>
-        const embed = document.getElementById('pdfEmbed');
-        const loading = document.getElementById('loading');
-        const pdfUrl = '{{ pdf_url }}';
-        const downloadUrl = '{{ download_url }}';
-
-        function applyZoom() {
-            if (!pdfUrl) return;
-            const baseUrl = pdfUrl.split('#')[0];
-            embed.src = `${baseUrl}#zoom=page-width`;
-        }
-
-        function hideLoading() {
-            loading.classList.add('hidden');
-        }
-
-        if (!pdfUrl) {
-            loading.innerHTML = '<div class="error-message">PDF fayl topilmadi.</div>';
-        } else {
-            applyZoom();
-            embed.addEventListener('load', hideLoading);
-            embed.addEventListener('error', () => {
-                loading.innerHTML = `
-                    <div class="error-message">PDF faylni ochib bo'lmadi.</div>
-                    <a class="download-link" href="${downloadUrl}" download>
-                        PDF ni yuklab olish
-                    </a>
-                `;
-            });
-
-            window.addEventListener('orientationchange', () => {
-                loading.classList.remove('hidden');
-                setTimeout(() => {
-                    applyZoom();
-                }, 200);
-            });
-        }
-
-        setTimeout(hideLoading, 1000);
-    </script>
+    <embed src="{{ pdf_url }}#zoom=page-width" type="application/pdf" title="Shahodatnoma">
 </body>
 </html>
 
